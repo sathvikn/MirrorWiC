@@ -140,20 +140,20 @@ def get_embed(sentences,tokenizer,model,flag='cls',layer_start=None,layer_end=No
         sentences=[sentence.replace('[','').replace(']','') for sentence in sentences]
         toks = tokenizer.batch_encode_plus(sentences, max_length = maxlen,truncation = True, padding="max_length", return_tensors="pt")
         with torch.no_grad():
-            outputs_ = model(input_ids=toks['input_ids'].cuda(),attention_mask=toks['attention_mask'].cuda(), output_hidden_states=True)
+            outputs_ = model(input_ids=toks['input_ids'],attention_mask=toks['attention_mask'], output_hidden_states=True)
         last_hidden_state = outputs_.last_hidden_state
         output = last_hidden_state.detach().cpu().numpy()[:,0]
     elif flag=='cls_with_token':
         toks = tokenizer.batch_encode_plus(sentences, max_length = maxlen,truncation = True, padding="max_length", return_tensors="pt")
         with torch.no_grad():
-            outputs_ = model(input_ids=toks['input_ids'].cuda(),attention_mask=toks['attention_mask'].cuda(), output_hidden_states=True)
+            outputs_ = model(input_ids=toks['input_ids'],attention_mask=toks['attention_mask'], output_hidden_states=True)
         last_hidden_state = outputs_.last_hidden_state
         output = last_hidden_state.detach().cpu().numpy()[:,0]
     elif flag=='mean':
         sentences=[sentence.replace('[','').replace(']','') for sentence in sentences]
         toks = tokenizer.batch_encode_plus(sentences, max_length = maxlen,truncation = True, padding="max_length", return_tensors="pt")
         with torch.no_grad():
-            outputs_ = model(input_ids=toks['input_ids'].cuda(),attention_mask=toks['attention_mask'].cuda(), output_hidden_states=True)
+            outputs_ = model(input_ids=toks['input_ids'],attention_mask=toks['attention_mask'], output_hidden_states=True)
         hidden_states = outputs_.hidden_states
         average_layer_batch = sum(hidden_states[layer_start:layer_end]) / (layer_end-layer_start)
         
@@ -164,31 +164,34 @@ def get_embed(sentences,tokenizer,model,flag='cls',layer_start=None,layer_end=No
         # print (sentences)
         toks = tokenizer.batch_encode_plus(sentences, max_length = maxlen,truncation = True, padding="max_length", return_tensors="pt")
         with torch.no_grad():
-            outputs_ = model(input_ids=toks['input_ids'].cuda(),attention_mask=toks['attention_mask'].cuda(), output_hidden_states=True)
+            outputs_ = model(input_ids=toks['input_ids'],attention_mask=toks['attention_mask'], output_hidden_states=True)
         last_hidden_state = outputs_.last_hidden_state
         output = last_hidden_state.detach().cpu().numpy()[:,0,:]
     elif flag=='alltoken':
         toks = tokenizer.batch_encode_plus(sentences, max_length = maxlen,truncation = True, padding="max_length", return_tensors="pt")
+        with torch.no_grad():
+            outputs_ = model(input_ids=toks['input_ids'],attention_mask=toks['attention_mask'], output_hidden_states=True)
+        hidden_states = outputs_.hidden_states
 
-       
-        # for num in range(average_layer_batch.size()[0]):
-        #     embeds_per_sent=average_layer_batch[num]
-        #     token_ids_per_sent=all_token_ids[num]
+        average_layer_batch = sum(hidden_states[layer_start:layer_end]) / (layer_end-layer_start)
+
+        for num in range(average_layer_batch.size()[0]):
+            embeds_per_sent=average_layer_batch[num]
             
-        #     embed_token=torch.mean(embeds_per_sent[int(token_ids_per_sent[0]):int(token_ids_per_sent[1])],dim=0,keepdim=True)
-        #     # assert int(token_ids_per_sent[0])!=int(token_ids_per_sent[1])
-        #     assert not torch.isnan(embed_token).any()
-        #     if num == 0:
-        #         output = embed_token
-        #     else:
-        #         output = torch.cat((output, embed_token),0)
+            embed_token=torch.mean(embeds_per_sent,dim=0,keepdim=True)
+            # assert int(token_ids_per_sent[0])!=int(token_ids_per_sent[1])
+            assert not torch.isnan(embed_token).any()
+            if num == 0:
+                output = embed_token
+            else:
+                output = torch.cat((output, embed_token),0)
         output = output.detach().cpu().numpy()
     elif flag.startswith('token'):
         toks = tokenizer.batch_encode_plus(sentences, max_length = maxlen,truncation = True, padding="max_length")
-        all_token_ids=torch.tensor([find_token_id(tok,tokenizer) for tok in toks['input_ids']], dtype=torch.long).cuda()
-        all_input_ids=torch.tensor([delete_tokenmark_input(tok,tokenizer) for tok in toks['input_ids']], dtype=torch.long).cuda()
-        all_attention_mask=torch.tensor([delete_tokenmarker_am(input_ids,tokenizer) for input_ids in all_input_ids], dtype=torch.long).cuda()
-        all_token_type_ids=torch.tensor([delete_tokenmaker_tokentypeids(input_ids,tokenizer) for input_ids in all_input_ids], dtype=torch.long).cuda()
+        all_token_ids=torch.tensor([find_token_id(tok,tokenizer) for tok in toks['input_ids']], dtype=torch.long)
+        all_input_ids=torch.tensor([delete_tokenmark_input(tok,tokenizer) for tok in toks['input_ids']], dtype=torch.long)
+        all_attention_mask=torch.tensor([delete_tokenmarker_am(input_ids,tokenizer) for input_ids in all_input_ids], dtype=torch.long)
+        all_token_type_ids=torch.tensor([delete_tokenmaker_tokentypeids(input_ids,tokenizer) for input_ids in all_input_ids], dtype=torch.long)
         inputs = {"input_ids": all_input_ids, "attention_mask": all_attention_mask}
         with torch.no_grad():
             outputs_ = model(**inputs, output_hidden_states=True)
